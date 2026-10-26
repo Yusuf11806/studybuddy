@@ -20,17 +20,35 @@ const chatLauncher = document.getElementById('chatLauncher');
 const chatBackButton = document.getElementById('chatBackButton');
 
 async function api(path, options = {}) {
-    const response = await fetch(`/api/${path.replace(/^\//, '')}`, {
-        credentials: 'same-origin',
-        ...options,
-        headers: {
-            ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-            ...options.headers
+    let response;
+    try {
+        response = await fetch(`/api/${path.replace(/^\//, '')}`, {
+            credentials: 'same-origin',
+            ...options,
+            headers: {
+                ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+                ...options.headers
+            }
+        });
+    } catch {
+        throw new Error('Cannot reach the Peer2Peer API. Check that the Vercel deployment includes the /api functions.');
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+        if (response.status === 404) {
+            throw new Error('Vercel could not find this API route. Redeploy the project from its root folder with the api directory included.');
         }
-    });
+        throw new Error(`The API returned a non-JSON response (HTTP ${response.status}). Check the Vercel Function logs.`);
+    }
 
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || 'Request failed. Please try again.');
+    if (!response.ok) {
+        if (response.status >= 500 && !data.error) {
+            throw new Error(`The server failed (HTTP ${response.status}). Check DATABASE_URL, SESSION_SECRET, and the Vercel Function logs.`);
+        }
+        throw new Error(data.error || `The API request failed (HTTP ${response.status}).`);
+    }
     return data;
 }
 
